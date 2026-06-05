@@ -1,0 +1,62 @@
+{
+  "functions": [
+    {
+      "codebase": "default",
+      "predeploy": [
+        "npm.cmd --prefix \"$RESOURCE_DIR\" run build"
+      ],
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ],
+      "source": "functions"
+    },
+    {
+      "source": "admin-management",
+      "codebase": "admin-management",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm.cmd --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "daklakagent",
+          "configurations": {
+            "web": "1:422631118526:web:5c9db89d9d0a72b140b0ef"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "target": "main_site",
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

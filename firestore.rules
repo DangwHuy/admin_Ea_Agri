@@ -1,0 +1,212 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. Hàm kiểm tra Admin
+    function isAdmin() {
+      return request.auth != null 
+      && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // 2. Cho phép xem Price và tất cả sub-collections (History, Forecast)
+    match /Price/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 3. Phân quyền cho các dữ liệu chung khác
+    match /{collectionName}/{documentId} {
+      allow read: if isAdmin() || collectionName in [
+        'products',
+        'home_banners', 
+        'crops', 
+        'yield_analysis', 
+        'harvest_summary',
+        'diseases',
+        'pest_diseases', 
+        'expertId',
+        'time',
+        'expertInfo',
+        'tasks',               
+        'fields',              
+        'production_overview',
+        'history'
+      ];
+      
+      // ĐÃ DỌN DẸP LẠI CODE: Gộp các quyền write bị trùng lặp ở bản cũ
+      allow write: if isAdmin() || 
+                   (collectionName in ['history', 'products'] && request.auth != null);  
+      
+      allow update: if collectionName == 'home_banners' && request.auth != null &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clicks', 'impressions']);
+    }
+    
+    // 4. Phân quyền cho bảng Người dùng (users)
+    match /users/{userId} {
+       allow read: if true;
+       allow create, update: if (request.auth != null && request.auth.uid == userId) || isAdmin(); 
+       
+       allow update: if request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['expertInfo']);
+       allow delete: if isAdmin(); 
+       
+       match /cart/{cartItemId} {
+          // Cho phép người dùng đọc và ghi vào giỏ hàng của chính mình
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+            
+      
+       // Quyền cho lịch sử chat AI (nằm trong sub-collection của user)
+       match /ai_chat_history/{chatId} {
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+
+       // ==========================================================
+       // 🎯 PHẦN THÊM MỚI: Cấp quyền lưu cache & lịch sử Báo Cáo AI
+       // ==========================================================
+       match /ai_history/{historyId} {
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+       // ==========================================================
+    }
+
+    // ==========================================================
+    // Cấp quyền cho collection 'chat_history'
+    // ==========================================================
+    match /chat_history/{userId} {
+      // Cho phép đọc/ghi document chính
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Cho phép đọc/ghi vào sub-collection 'messages'
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    // ==========================================================
+
+    // 5. Dữ liệu IoT và artifacts
+    match /artifacts/{appId}/users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 6. Hệ thống Đặt lịch hẹn
+    match /appointments/{appointmentId} {
+      allow read, update: if isAdmin() || (request.auth != null && (
+        resource.data.farmerId == request.auth.uid || 
+        resource.data.expertId == request.auth.uid
+      ));
+      allow create: if request.auth != null && request.resource.data.farmerId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+    
+    // 7. Hệ thống CHAT
+    match /chat_rooms/{roomId} {
+      allow read, write: if request.auth != null;
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+    
+    match /chats/{roomId} {
+      allow read, write: if request.auth != null;
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    // 8. Hệ thống BÀI ĐĂNG & BÌNH LUẬN 
+    match /posts/{postId} {
+      allow read, create, update: if request.auth != null;
+      allow delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+
+      match /comments/{commentId} {
+        allow read, create, update: if request.auth != null;
+        allow delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // 9. Hệ thống SẢN PHẨM 
+    match /products/{productId} {
+      allow read: if true; 
+      allow create: if request.auth != null;
+      allow update, delete: if isAdmin() || 
+        (request.auth != null && resource.data.seller.id == request.auth.uid);
+    }
+
+    // 10. AI CHAT LOGS CHO ADMIN 
+    match /chat_history/{document=**} {
+      // Cho phép nông dân tạo log khi gửi câu hỏi cho AI (chỉ cần đăng nhập là được ghi)
+      allow create: if request.auth != null;
+      // Khóa bảo mật: CHỈ CÓ ADMIN mới được phép vào màn hình đọc, sửa hoặc xoá dữ liệu log này
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ==========================================================
+    // 10.5 HỆ THỐNG ĐĂNG KÝ CHUYÊN GIA (EXPERT REQUESTS) - ĐÃ THÊM MỚI
+    // ==========================================================
+    match /expert_requests/{requestId} {
+      // Bất kỳ ai đã đăng nhập đều có thể gửi form đăng ký
+      allow create: if request.auth != null;
+      // Chỉ Admin hoặc chính người gửi mới xem được đơn của mình
+      allow read: if isAdmin() || (request.auth != null && resource.data.userId == request.auth.uid);
+      // Chỉ Admin mới có quyền cập nhật (duyệt/từ chối) hoặc xoá
+      allow update, delete: if isAdmin();
+    }
+
+    // ==========================================================
+    // 11. HỆ THỐNG ĐỀ XUẤT BỆNH (Phần thêm mới cho các screen duyệt)
+    // ==========================================================
+    match /pest_diseases/{documentId} {
+      // Bất kỳ ai đã đăng nhập đều có thể gửi form đề xuất bệnh
+      allow create: if request.auth != null;
+      // Chỉ Admin mới được quyền đọc danh sách, cập nhật trạng thái (approve/reject)
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ==========================================================
+    // 12. HỆ THỐNG ĐƠN HÀNG & THỐNG KÊ (Phần thêm mới cho Biểu đồ & Dashboard)
+    // ==========================================================
+    match /orders/{orderId} {
+      // Bất kỳ user đăng nhập nào cũng tạo được đơn hàng
+      allow create: if request.auth != null;
+      // User chỉ xem được đơn của mình, Admin được xem tất cả
+      allow read: if isAdmin() || (request.auth != null && resource.data.customerId == request.auth.uid);
+      // Chỉ Admin mới được quyền đổi trạng thái đơn hàng hoặc xoá
+      allow update, delete: if isAdmin();
+    }
+
+    match /daily_stats/{statId} {
+      // Admin cần quyền read để vẽ biểu đồ
+      allow read: if isAdmin(); 
+      // User khi mua hàng (hàm _checkout) cần quyền write để cộng dồn tiền/đơn
+      allow write: if request.auth != null; 
+    }
+
+    match /product_stats/{statId} {
+      // Cho phép ai cũng đọc được để App có thể hiện "Top sản phẩm bán chạy" (nếu cần)
+      allow read: if true; 
+      // User khi mua hàng cần quyền write để cộng dồn số lượng đã bán
+      allow write: if request.auth != null; 
+    }
+    
+    // ==========================================================
+    // 13. HỆ THỐNG THÔNG BÁO (Notifications) - MỚI THÊM
+    // ==========================================================
+    match /notifications/{notificationId} {
+      // Cho phép user đã đăng nhập (Nông dân) tạo thông báo mới gửi cho Chuyên gia
+      allow create: if request.auth != null;
+      
+      // Cho phép Người nhận (Chuyên gia) đọc, cập nhật (đã đọc) hoặc xoá thông báo của chính họ. Admin có toàn quyền.
+      allow read, update, delete: if isAdmin() || (request.auth != null && resource.data.receiverId == request.auth.uid);
+    }
+    // ==========================================================
+    // 14. HỆ THỐNG THÔNG BÁO DÀNH CHO ADMIN (admin_notifications)
+    // ==========================================================
+    match /admin_notifications/{docId} {
+      // Chỉ có tài khoản mang role Admin mới được phép đọc và cập nhật (đánh dấu đã đọc)
+      allow read, update: if isAdmin();
+      // Việc phân phối thông báo mới (create) chỉ được thực hiện bởi Firebase Cloud Functions (backend)
+      allow create, delete: if false; 
+    }
+  }
+}

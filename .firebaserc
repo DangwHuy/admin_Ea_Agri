@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "daklakagent"
+  },
+  "targets": {
+    "daklakagent": {
+      "hosting": {
+        "main_site": [
+          "eaagriadmin"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
