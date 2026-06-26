@@ -17,6 +17,14 @@ class MembershipUpgradeScreen extends StatefulWidget {
 class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
   final UpgradeService _upgradeService = UpgradeService();
   final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +41,6 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
             // Header
             Row(
               children: [
-                IconButton(
-                  icon: Icon(Icons.arrow_back, color: onSurface),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                const SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -62,16 +65,45 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
             const SizedBox(height: 24),
 
             // Toolbar
-            const Padding(
-              padding: EdgeInsets.only(bottom: 20),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
               child: CustomAdminToolbar(
                 height: 56,
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
                 children: [
-                  Expanded(
+                  const Expanded(
                     child: Text(
                       'Danh sách yêu cầu đang chờ xử lý',
                       style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: 280,
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value.trim();
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Tìm theo mã CK (VD: EA 1A2B)',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Theme.of(context).primaryColor),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -90,15 +122,22 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final requests = snapshot.data ?? [];
+                  var requests = snapshot.data ?? [];
+
+                  if (_searchQuery.isNotEmpty) {
+                    requests = requests.where((req) {
+                      final code = req.transferCode?.toLowerCase() ?? '';
+                      return code.contains(_searchQuery.toLowerCase());
+                    }).toList();
+                  }
 
                   if (requests.isEmpty) {
                     return const Center(child: Text('Không có yêu cầu nào đang chờ.'));
                   }
 
                   return CustomAdminTable(
-                    flex: const [3, 2, 2, 2, 3],
-                    labels: const ['Người dùng', 'Gói yêu cầu', 'Số tiền', 'Ngày yêu cầu', 'Thao tác'],
+                    flex: const [3, 2, 2, 2, 2, 3],
+                    labels: const ['Người dùng', 'Gói yêu cầu', 'Mã chuyển khoản', 'Số tiền', 'Ngày yêu cầu', 'Thao tác'],
                     itemCount: requests.length,
                     rowBuilder: (context, index) {
                       final req = requests[index];
@@ -118,6 +157,26 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
                           child: CustomAdminBadge(
                             text: req.requestedTier,
                             color: req.requestedTier == 'PRO' ? Colors.purple : Colors.blue,
+                          ),
+                        ),
+                        // Transfer Code
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).primaryColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              req.transferCode?.toUpperCase() ?? 'KHÔNG RÕ',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).primaryColor,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
                           ),
                         ),
                         // Amount
@@ -170,7 +229,7 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
 
     if (confirm == true) {
       try {
-        await _upgradeService.approveRequest(request);
+        await _upgradeService.approveRequest(request, adminMessage: 'Giao dịch thành công. Cảm ơn bạn đã nâng cấp hội viên!');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Đã duyệt yêu cầu thành công')),
@@ -187,11 +246,27 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
   }
 
   void _handleReject(UpgradeRequestModel request) async {
+    final reasonController = TextEditingController(text: 'Không tìm thấy mã thanh toán hợp lệ. Vui lòng kiểm tra lại.');
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Từ chối yêu cầu'),
-        content: Text('Bạn có chắc chắn muốn từ chối yêu cầu của ${request.userDisplayName}?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Bạn có chắc chắn muốn từ chối yêu cầu của ${request.userDisplayName}?'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Lý do từ chối (sẽ gửi cho người dùng)',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
           TextButton(
@@ -205,7 +280,7 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
 
     if (confirm == true) {
       try {
-        await _upgradeService.rejectRequest(request.id);
+        await _upgradeService.rejectRequest(request.id, adminMessage: reasonController.text.trim());
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Đã từ chối yêu cầu')),

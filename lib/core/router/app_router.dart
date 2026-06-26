@@ -6,6 +6,7 @@ import '../../features/auth/logic/user_provider.dart';
 import '../../features/user_management/screens/user_list_screen.dart';
 import '../../features/content_management/screens/disease_manager_screen.dart';
 import '../../features/content_management/screens/banner_manager_screen.dart';
+import '../../features/content_management/screens/community_posts_screen.dart';
 
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
@@ -148,6 +149,10 @@ Chúng tôi luôn sẵn sàng lắng nghe ý kiến đóng góp của bạn đ�
             GoRoute(
               path: '/banners',
               builder: (context, state) => const BannerManagerScreen(),
+            ),
+            GoRoute(
+              path: '/community-posts',
+              builder: (context, state) => const CommunityPostsScreen(),
             ),
             GoRoute(
               path: '/appointments',

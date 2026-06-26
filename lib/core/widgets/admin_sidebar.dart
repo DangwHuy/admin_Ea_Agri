@@ -41,6 +41,7 @@ const _menuGroups = [
     _MenuItem(Icons.attach_money_outlined, 'Giá nông sản', '/prices'),
     _MenuItem(Icons.bug_report_outlined, 'Sâu bệnh', '/diseases'),
     _MenuItem(Icons.confirmation_number_outlined, 'Mã giảm giá', '/promotions'),
+    _MenuItem(Icons.forum_outlined, 'Cộng đồng', '/community-posts'),
   ]),
   _MenuGroup('Hệ thống', [
     _MenuItem(Icons.image_outlined, 'Banner', '/banners'),

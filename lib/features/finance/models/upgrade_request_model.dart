@@ -8,6 +8,8 @@ class UpgradeRequestModel {
   final String requestedTier;
   final double amount;
   final String status;
+  final String? transferCode;
+  final String? adminMessage;
   final DateTime createdAt;
   final DateTime? approvedAt;
   final DateTime? rejectedAt;
@@ -20,6 +22,8 @@ class UpgradeRequestModel {
     required this.requestedTier,
     required this.amount,
     required this.status,
+    this.transferCode,
+    this.adminMessage,
     required this.createdAt,
     this.approvedAt,
     this.rejectedAt,
@@ -35,6 +39,8 @@ class UpgradeRequestModel {
       requestedTier: data['requestedTier'] ?? '',
       amount: (data['amount'] ?? 0).toDouble(),
       status: data['status'] ?? 'pending',
+      transferCode: data['transferCode'],
+      adminMessage: data['adminMessage'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       approvedAt: (data['approvedAt'] as Timestamp?)?.toDate(),
       rejectedAt: (data['rejectedAt'] as Timestamp?)?.toDate(),

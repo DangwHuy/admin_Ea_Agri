@@ -49,12 +49,6 @@ class FinanceScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    IconButton(
-                      icon: Icon(Icons.arrow_back, color: _getTextPrimary(context)),
-                      onPressed: () => context.pop(),
-                      tooltip: 'Quay lại',
-                    ),
-                    const SizedBox(width: 8),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

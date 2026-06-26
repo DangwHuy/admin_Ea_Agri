@@ -18,15 +18,21 @@ class UpgradeService {
         });
   }
 
-  Future<void> approveRequest(UpgradeRequestModel request) async {
+  Future<void> approveRequest(UpgradeRequestModel request, {String? adminMessage}) async {
     final batch = _db.batch();
 
     // 1. Update upgrade request status
     final requestRef = _db.collection('upgrade_requests').doc(request.id);
-    batch.update(requestRef, {
+    
+    final updateData = <String, dynamic>{
       'status': 'approved',
       'approvedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    if (adminMessage != null && adminMessage.isNotEmpty) {
+      updateData['adminMessage'] = adminMessage;
+    }
+    
+    batch.update(requestRef, updateData);
 
     // 2. Update user subscription
     final int maxAi = (request.requestedTier == 'EXPERT') ? 50 : 200;
@@ -54,10 +60,15 @@ class UpgradeService {
     await batch.commit();
   }
 
-  Future<void> rejectRequest(String requestId) async {
-    await _db.collection('upgrade_requests').doc(requestId).update({
+  Future<void> rejectRequest(String requestId, {String? adminMessage}) async {
+    final updateData = <String, dynamic>{
       'status': 'rejected',
       'rejectedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    if (adminMessage != null && adminMessage.isNotEmpty) {
+      updateData['adminMessage'] = adminMessage;
+    }
+    
+    await _db.collection('upgrade_requests').doc(requestId).update(updateData);
   }
 }
