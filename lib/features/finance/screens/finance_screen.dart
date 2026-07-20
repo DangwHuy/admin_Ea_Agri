@@ -397,8 +397,8 @@ class FinanceScreen extends StatelessWidget {
         SizedBox(
           height: provider.revenues.isEmpty ? 200 : (provider.revenues.length * 72.0 + 80).clamp(200, 600),
           child: CustomAdminTable(
-            flex: const [2, 2, 4, 2], // Không cần cột Thao tác
-            labels: const ['Ngày', 'Nguồn thu', 'Mô tả', 'Số tiền'],
+            flex: const [2, 2, 4, 2, 1], // Thêm cột Thao tác
+            labels: const ['Ngày', 'Nguồn thu', 'Mô tả', 'Số tiền', 'Thao tác'],
             itemCount: provider.revenues.length,
             onRowTapWithIndex: (_) {},
             rowBuilder: (context, index) {
@@ -427,6 +427,32 @@ class FinanceScreen extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: _getPrimaryGreen(context),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    icon: Icon(Icons.delete_outline, color: _getWarningRed(context), size: 20),
+                    tooltip: 'Xóa',
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Xóa doanh thu'),
+                          content: const Text('Bạn có chắc chắn muốn xóa bản ghi doanh thu này không? Hành động này sẽ xóa dữ liệu gốc (đơn hàng/yêu cầu nâng cấp).'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                provider.deleteRevenue(revenue.id, revenue.source);
+                              },
+                              child: Text('Xóa', style: TextStyle(color: _getWarningRed(context))),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ];

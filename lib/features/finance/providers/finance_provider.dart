@@ -91,6 +91,10 @@ class FinanceProvider with ChangeNotifier {
     await _service.deleteExpense(id);
   }
 
+  Future<void> deleteRevenue(String id, String source) async {
+    await _service.deleteRevenue(id, source);
+  }
+
   @override
   void dispose() {
     _expenseSub?.cancel();

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/expense_model.dart';
 import '../models/revenue_model.dart';
+import '../../logs/services/audit_service.dart';
+import '../../logs/models/audit_log_model.dart';
 
 class FinanceService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -24,6 +26,13 @@ class FinanceService {
   // Delete an expense record (utility for the UI)
   Future<void> deleteExpense(String id) async {
     await _db.collection('expenses').doc(id).delete();
+    
+    await AuditService.logAction(
+      type: AuditActionType.delete,
+      module: AuditModule.finance,
+      description: "Xóa bản ghi chi phí (ID: $id)",
+      details: {'expenseId': id},
+    );
   }
 
   // Stream completed orders to calculate gross revenue
@@ -114,5 +123,24 @@ class FinanceService {
         );
       }).toList();
     });
+  }
+
+  // Delete a revenue record
+  Future<void> deleteRevenue(String id, String source) async {
+    if (source == 'Bán Nông Sản') {
+      await _db.collection('orders').doc(id).delete();
+    } else if (source == 'Gói Hội Viên') {
+      await _db.collection('upgrade_requests').doc(id).delete();
+    }
+    
+    await AuditService.logAction(
+      type: AuditActionType.delete,
+      module: AuditModule.finance,
+      description: "Xóa bản ghi doanh thu ($source) - ID: $id",
+      details: {
+        'id': id,
+        'source': source,
+      },
+    );
   }
 }

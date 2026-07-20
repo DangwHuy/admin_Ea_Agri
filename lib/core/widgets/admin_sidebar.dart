@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/menu_provider.dart';
 import '../providers/theme_provider.dart';
 import '../constants/app_colors.dart';
@@ -309,6 +310,53 @@ class _SidebarTile extends StatefulWidget {
 class _SidebarTileState extends State<_SidebarTile> {
   bool _hovered = false;
 
+  Widget _buildBadge(bool isExpanded) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('upgrade_requests')
+          .where('status', isEqualTo: 'pending')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final count = snapshot.data!.docs.length;
+        final countText = count > 99 ? '99+' : count.toString();
+        
+        if (isExpanded) {
+          return Container(
+            margin: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              countText,
+              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+          );
+        } else {
+          return Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                countText,
+                style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+              ),
+            ),
+          );
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final active = widget.isActive;
@@ -340,36 +388,50 @@ class _SidebarTileState extends State<_SidebarTile> {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(100),
           ),
-          child: Row(
-            mainAxisAlignment: widget.isExpanded
-                ? MainAxisAlignment.start
-                : MainAxisAlignment.center,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              if (widget.isExpanded) const SizedBox(width: 16),
-              Icon(widget.item.icon, size: 22, color: fgColor),
-              if (widget.isExpanded)
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const NeverScrollableScrollPhysics(),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(width: 14),
-                        Text(
-                          widget.item.label,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: fgColor,
-                                fontWeight: active
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
-                              ),
-                        ),
-                      ],
-                    ),
+              Row(
+                mainAxisAlignment: widget.isExpanded
+                    ? MainAxisAlignment.start
+                    : MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (widget.isExpanded) const SizedBox(width: 16),
+                  Container(
+                    height: 44, // Match itemHeight
+                    alignment: Alignment.center,
+                    child: Icon(widget.item.icon, size: 22, color: fgColor),
                   ),
-                ),
+                  if (widget.isExpanded)
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const NeverScrollableScrollPhysics(),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(width: 14),
+                            Text(
+                              widget.item.label,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: fgColor,
+                                    fontWeight: active
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (widget.isExpanded && widget.item.route == '/finance/upgrades')
+                    _buildBadge(true),
+                ],
+              ),
+              if (!widget.isExpanded && widget.item.route == '/finance/upgrades')
+                _buildBadge(false),
             ],
           ),
         ),
