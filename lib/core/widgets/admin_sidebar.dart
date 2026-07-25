@@ -320,7 +320,17 @@ class _SidebarTileState extends State<_SidebarTile> {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
         }
-        final count = snapshot.data!.docs.length;
+        final validDocs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>?;
+          if (data == null) return false;
+          final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+          if (createdAt == null) return false;
+          return DateTime.now().difference(createdAt).inMinutes <= 10;
+        }).toList();
+        final count = validDocs.length;
+        if (count == 0) {
+          return const SizedBox.shrink();
+        }
         final countText = count > 99 ? '99+' : count.toString();
         
         if (isExpanded) {

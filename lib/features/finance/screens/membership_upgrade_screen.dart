@@ -20,6 +20,8 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
   final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _isCleaning = false;
+  final Set<String> _selectedRequestIds = {};
   Timer? _timer;
   late Stream<List<UpgradeRequestModel>> _requestsStream;
 
@@ -30,6 +32,119 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
+    // Tự động dọn dẹp các yêu cầu quá hạn khi mở màn hình
+    _upgradeService.cleanupExpiredRequests().then((count) {
+      if (count > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã tự động dọn dẹp $count yêu cầu nâng cấp quá hạn')),
+        );
+      }
+    });
+  }
+
+  Future<void> _handleCleanup() async {
+    setState(() => _isCleaning = true);
+    try {
+      final count = await _upgradeService.cleanupExpiredRequests();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              count > 0
+                  ? 'Đã dọn dẹp thành công $count yêu cầu quá hạn!'
+                  : 'Không có yêu cầu quá hạn nào cần dọn dẹp.',
+            ),
+            backgroundColor: count > 0 ? Colors.green : Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi khi dọn dẹp: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCleaning = false);
+    }
+  }
+
+  Widget _buildBulkActionBar() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_box_outlined, color: Colors.red.shade400),
+          const SizedBox(width: 8),
+          Text(
+            'Đã chọn ${_selectedRequestIds.length} yêu cầu',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => setState(() => _selectedRequestIds.clear()),
+            child: const Text('Bỏ chọn'),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: _handleBulkDelete,
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('Xóa lịch sử đã chọn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleBulkDelete() async {
+    final count = _selectedRequestIds.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận xóa'),
+        content: Text('Bạn có chắc chắn muốn xóa vĩnh viễn $count lịch sử yêu cầu nâng cấp đã chọn không? Hành động này không thể hoàn tác.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Xóa vĩnh viễn'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final idsToDelete = _selectedRequestIds.toList();
+        await _upgradeService.deleteRequests(idsToDelete);
+        if (mounted) {
+          setState(() {
+            _selectedRequestIds.clear();
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Đã xóa thành công $count yêu cầu'), backgroundColor: Colors.green),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Lỗi khi xóa: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -100,6 +215,25 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
                     ),
                   ),
                   const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _isCleaning ? null : _handleCleanup,
+                    icon: _isCleaning
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.cleaning_services_outlined, size: 18),
+                    label: const Text('Dọn dẹp YC quá hạn'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange.shade700,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
                   SizedBox(
                     width: 280,
                     child: TextField(
@@ -133,6 +267,7 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
             ),
 
             // Table
+            if (_selectedRequestIds.isNotEmpty) _buildBulkActionBar(),
             Expanded(
               child: StreamBuilder<List<UpgradeRequestModel>>(
                 stream: _requestsStream,
@@ -161,16 +296,50 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
                     flex: const [3, 2, 2, 2, 2, 3],
                     labels: const ['Người dùng', 'Gói yêu cầu', 'Mã chuyển khoản', 'Số tiền', 'Ngày yêu cầu', 'Trạng thái / Thao tác'],
                     itemCount: requests.length,
+                    showHeaderCheckbox: true,
+                    headerCheckboxValue: requests.isNotEmpty && requests.every((req) => _selectedRequestIds.contains(req.id)),
+                    onHeaderCheckboxChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          for (var req in requests) {
+                            _selectedRequestIds.add(req.id);
+                          }
+                        } else {
+                          _selectedRequestIds.clear();
+                        }
+                      });
+                    },
                     rowBuilder: (context, index) {
                       final req = requests[index];
+                      final isSelected = _selectedRequestIds.contains(req.id);
                       return [
                         // User info
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        Row(
                           children: [
-                            Text(req.userDisplayName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            Text(req.userEmail, style: Theme.of(context).textTheme.bodySmall),
+                            Checkbox(
+                              value: isSelected,
+                              activeColor: Theme.of(context).primaryColor,
+                              onChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _selectedRequestIds.add(req.id);
+                                  } else {
+                                    _selectedRequestIds.remove(req.id);
+                                  }
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(req.userDisplayName, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                  Text(req.userEmail, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                         // Requested Tier

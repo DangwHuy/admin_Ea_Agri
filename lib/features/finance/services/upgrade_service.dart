@@ -109,4 +109,53 @@ class UpgradeService {
       },
     );
   }
+
+  Future<int> cleanupExpiredRequests() async {
+    final querySnapshot = await _db
+        .collection('upgrade_requests')
+        .where('status', isEqualTo: 'pending')
+        .get();
+
+    int cleanedCount = 0;
+    final now = DateTime.now();
+    final batch = _db.batch();
+
+    for (var doc in querySnapshot.docs) {
+      final data = doc.data();
+      final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+      if (createdAt == null || now.difference(createdAt).inMinutes > 10) {
+        batch.update(doc.reference, {
+          'status': 'expired',
+          'expiredAt': FieldValue.serverTimestamp(),
+        });
+        cleanedCount++;
+      }
+    }
+
+    if (cleanedCount > 0) {
+      await batch.commit();
+      await AuditService.logAction(
+        type: AuditActionType.update,
+        module: AuditModule.finance,
+        description: "Dọn dẹp tự động $cleanedCount yêu cầu nâng cấp quá hạn",
+        details: {'cleanedCount': cleanedCount},
+      );
+    }
+    return cleanedCount;
+  }
+
+  Future<void> deleteRequests(List<String> ids) async {
+    final batch = _db.batch();
+    for (var id in ids) {
+      batch.delete(_db.collection('upgrade_requests').doc(id));
+    }
+    await batch.commit();
+
+    await AuditService.logAction(
+      type: AuditActionType.delete,
+      module: AuditModule.finance,
+      description: "Xóa ${ids.length} lịch sử yêu cầu nâng cấp",
+      details: {'deletedIds': ids},
+    );
+  }
 }

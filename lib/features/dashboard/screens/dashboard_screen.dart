@@ -25,11 +25,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<int> _totalFarmersFuture;
   late Future<int> _newFarmersTodayFuture;
   late Future<List<FlSpot>> _chartData7DaysFuture;
-  late Future<int> _totalExpertsFuture;
-  late Future<int> _onlineExpertsFuture;
+  late Future<int> _activeUsersFuture;
   late Future<int> _pendingAppointmentsFuture;
   late Future<int> _confirmedAppointmentsFuture;
   late Future<int> _cancelledAppointmentsFuture;
+
+  late Stream<int> _totalFarmersStream;
+  late Stream<int> _newFarmersTodayStream;
+  late Stream<int> _activeUsersStream;
+  late Stream<int> _pendingAppointmentsStream;
+  late Stream<int> _confirmedAppointmentsStream;
+  late Stream<int> _cancelledAppointmentsStream;
 
   @override
   void initState() {
@@ -42,11 +48,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _totalFarmersFuture = _getTotalFarmers();
       _newFarmersTodayFuture = _getNewFarmersToday();
       _chartData7DaysFuture = _getChartData7Days();
-      _totalExpertsFuture = _getTotalExperts();
-      _onlineExpertsFuture = _getOnlineExperts();
+      _activeUsersFuture = _getActiveUsers();
       _pendingAppointmentsFuture = _getAppointmentsCount('pending');
       _confirmedAppointmentsFuture = _getAppointmentsCount('confirmed');
       _cancelledAppointmentsFuture = _getAppointmentsCount('cancelled');
+
+      _totalFarmersStream = _getTotalFarmersStream();
+      _newFarmersTodayStream = _getNewFarmersTodayStream();
+      _activeUsersStream = _getActiveUsersStream();
+      _pendingAppointmentsStream = _getAppointmentsStream('pending');
+      _confirmedAppointmentsStream = _getAppointmentsStream('confirmed');
+      _cancelledAppointmentsStream = _getAppointmentsStream('cancelled');
     });
   }
 
@@ -193,13 +205,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       key: const ValueKey('farmer_stat_card'),
       titleTotal: 'Nông dân',
       titleNew: 'Hôm nay',
+      titleThird: 'Hoạt động',
       iconTotal: Icons.people_alt_rounded,
       iconNew: Icons.person_add_alt_1_rounded,
+      iconThird: Icons.online_prediction_rounded,
       colorTotal: Colors.green,
       colorNew: Colors.green,
+      colorThird: Colors.blue,
       chartColor: Colors.green,
       futureTotal: _totalFarmersFuture,
       futureNew: _newFarmersTodayFuture,
+      futureThird: _activeUsersFuture,
+      streamTotal: _totalFarmersStream,
+      streamNew: _newFarmersTodayStream,
+      streamThird: _activeUsersStream,
       futureChart: _chartData7DaysFuture,
     );
   }
@@ -211,14 +230,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       iconTotal: Icons.hourglass_empty_rounded,
       colorTotal: Colors.orange,
       futureTotal: _pendingAppointmentsFuture,
+      streamTotal: _pendingAppointmentsStream,
       titleNew: 'Đã nhận',
       iconNew: Icons.check_circle_outline_rounded,
       colorNew: Colors.green,
       futureNew: _confirmedAppointmentsFuture,
+      streamNew: _confirmedAppointmentsStream,
       titleThird: 'Đã hủy',
       iconThird: Icons.cancel_outlined,
       colorThird: Colors.red,
       futureThird: _cancelledAppointmentsFuture,
+      streamThird: _cancelledAppointmentsStream,
       chartTitle: 'Phân bố trạng thái',
       chartColor: Colors.transparent,
       isHorizontalBar: true,
@@ -268,18 +290,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) { return const [FlSpot(0, 0)]; }
   }
 
-  Future<int> _getTotalExperts() async {
+  Future<int> _getActiveUsers() async {
     try {
       final snap = await FirebaseFirestore.instance.collection('users')
-          .where('role', whereIn: ['expert', 'Expert', 'Chuyên gia']).count().get();
-      return snap.count ?? 0;
-    } catch (e) { return 0; }
-  }
-
-  Future<int> _getOnlineExperts() async {
-    try {
-      final snap = await FirebaseFirestore.instance.collection('users')
-          .where('role', whereIn: ['expert', 'Expert', 'Chuyên gia'])
           .where('isOnline', isEqualTo: true).count().get();
       return snap.count ?? 0;
     } catch (e) { return 0; }
@@ -298,6 +311,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return snap.count ?? 0;
     } catch (e) { return 0; }
   }
+
+  Stream<int> _getTotalFarmersStream() {
+    return FirebaseFirestore.instance.collection('users')
+        .where('role', whereIn: ['farmer', 'Farmer', 'Nông dân'])
+        .snapshots()
+        .map((snap) => snap.docs.length);
+  }
+
+  Stream<int> _getNewFarmersTodayStream() {
+    final startOfToday = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    return FirebaseFirestore.instance.collection('users')
+        .where('role', whereIn: ['farmer', 'Farmer', 'Nông dân'])
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
+        .snapshots()
+        .map((snap) => snap.docs.length);
+  }
+
+  Stream<int> _getActiveUsersStream() {
+    return FirebaseFirestore.instance.collection('users')
+        .where('isOnline', isEqualTo: true)
+        .snapshots()
+        .map((snap) => snap.docs.length);
+  }
+
+  Stream<int> _getAppointmentsStream(String status) {
+    List<String> statusFilter;
+    if (status == 'pending') statusFilter = ['pending', 'Pending', 'Chờ xác nhận'];
+    else if (status == 'confirmed') statusFilter = ['confirmed', 'Confirmed', 'Đã xác nhận'];
+    else statusFilter = ['cancelled', 'Cancelled', 'Đã hủy'];
+
+    return FirebaseFirestore.instance.collection('appointments')
+        .where('status', whereIn: statusFilter)
+        .snapshots()
+        .map((snap) => snap.docs.length);
+  }
 }
 
 class DashboardStatCard extends StatefulWidget {
@@ -314,6 +362,9 @@ class DashboardStatCard extends StatefulWidget {
   final IconData? iconThird;
   final Color? colorThird;
   final Future<int>? futureThird;
+  final Stream<int>? streamTotal;
+  final Stream<int>? streamNew;
+  final Stream<int>? streamThird;
   final bool isHorizontalBar;
   final Future<int> futureTotal;
   final Future<int> futureNew;
@@ -335,6 +386,9 @@ class DashboardStatCard extends StatefulWidget {
     this.iconThird,
     this.colorThird,
     this.futureThird,
+    this.streamTotal,
+    this.streamNew,
+    this.streamThird,
     required this.futureTotal,
     required this.futureNew,
     this.futureChart,
@@ -373,6 +427,20 @@ class _DashboardStatCardState extends State<DashboardStatCard> {
     return Future.wait(futures);
   }
 
+  Widget _buildLiveStatItem(String title, int fallbackValue, Stream<int>? stream, IconData icon, Color color) {
+    if (stream != null) {
+      return StreamBuilder<int>(
+        stream: stream,
+        initialData: fallbackValue,
+        builder: (context, snapshot) {
+          final val = snapshot.data ?? fallbackValue;
+          return _buildStatItem(title, val.toString(), icon, color);
+        },
+      );
+    }
+    return _buildStatItem(title, fallbackValue.toString(), icon, color);
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<dynamic>>(
@@ -402,12 +470,12 @@ class _DashboardStatCardState extends State<DashboardStatCard> {
                   flex: 1,
                   child: Row(
                     children: [
-                      Expanded(child: _buildStatItem(widget.titleTotal, data1.toString(), widget.iconTotal, widget.colorTotal)),
+                      Expanded(child: _buildLiveStatItem(widget.titleTotal, data1, widget.streamTotal, widget.iconTotal, widget.colorTotal)),
                       Container(width: 1, color: Theme.of(context).dividerColor),
-                      Expanded(child: _buildStatItem(widget.titleNew, data2.toString(), widget.iconNew, widget.colorNew)),
+                      Expanded(child: _buildLiveStatItem(widget.titleNew, data2, widget.streamNew, widget.iconNew, widget.colorNew)),
                       if (widget.titleThird != null && widget.iconThird != null && widget.colorThird != null) ...[
                         Container(width: 1, color: Theme.of(context).dividerColor),
-                        Expanded(child: _buildStatItem(widget.titleThird!, data3.toString(), widget.iconThird!, widget.colorThird!)),
+                        Expanded(child: _buildLiveStatItem(widget.titleThird!, data3, widget.streamThird, widget.iconThird!, widget.colorThird!)),
                       ]
                     ],
                   ),
@@ -759,22 +827,20 @@ class ExpertOverviewCard extends StatefulWidget {
 }
 
 class _ExpertOverviewCardState extends State<ExpertOverviewCard> {
-  late Future<Map<String, int>> _expertStatsFuture;
+  late Stream<QuerySnapshot> _expertStream;
   late Future<List<Map<String, dynamic>>> _topExpertsFuture;
 
   @override
   void initState() {
     super.initState();
-    _expertStatsFuture = _getExpertStats();
+    _expertStream = _getExpertStream();
     _topExpertsFuture = _getTopRatedExperts();
   }
 
-  Future<Map<String, int>> _getExpertStats() async {
-    try {
-      final t = await FirebaseFirestore.instance.collection('users').where('role', whereIn: ['expert', 'Expert', 'Chuyên gia']).count().get();
-      final o = await FirebaseFirestore.instance.collection('users').where('role', whereIn: ['expert', 'Expert', 'Chuyên gia']).where('isOnline', isEqualTo: true).count().get();
-      return {'total': t.count ?? 0, 'online': o.count ?? 0};
-    } catch (e) { return {'total': 0, 'online': 0}; }
+  Stream<QuerySnapshot> _getExpertStream() {
+    return FirebaseFirestore.instance.collection('users')
+        .where('role', whereIn: ['expert', 'Expert', 'Chuyên gia'])
+        .snapshots();
   }
 
   Future<List<Map<String, dynamic>>> _getTopRatedExperts() async {
@@ -792,16 +858,21 @@ class _ExpertOverviewCardState extends State<ExpertOverviewCard> {
         children: [
           Expanded(
             flex: 3,
-            child: FutureBuilder<Map<String, int>>(
-              future: _expertStatsFuture,
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _expertStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                final data = snapshot.data ?? {'total': 0, 'online': 0};
+                final docs = snapshot.data?.docs ?? [];
+                final total = docs.length;
+                final online = docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>?;
+                  return data?['isOnline'] == true;
+                }).length;
                 return Row(
                   children: [
-                    Expanded(child: _buildTopStatItem('Chuyên gia', data['total'].toString(), Icons.engineering_rounded, Colors.blue)),
+                    Expanded(child: _buildTopStatItem('Chuyên gia', total.toString(), Icons.engineering_rounded, Colors.blue)),
                     Container(width: 1, color: Theme.of(context).dividerColor),
-                    Expanded(child: _buildTopStatItem('Đang online', data['online'].toString(), Icons.wifi_rounded, Colors.lightBlue)),
+                    Expanded(child: _buildTopStatItem('Đang online', online.toString(), Icons.wifi_rounded, Colors.lightBlue)),
                   ],
                 );
               },
@@ -860,13 +931,16 @@ class _ExpertOverviewCardState extends State<ExpertOverviewCard> {
                       Text('Tỷ lệ trạng thái', style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Expanded(
-                        child: FutureBuilder<Map<String, int>>(
-                          future: _expertStatsFuture,
+                        child: StreamBuilder<QuerySnapshot>(
+                          stream: _expertStream,
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-                            final stats = snapshot.data ?? {'total': 0, 'online': 0};
-                            int total = stats['total'] ?? 0;
-                            int online = stats['online'] ?? 0;
+                            final docs = snapshot.data?.docs ?? [];
+                            final total = docs.length;
+                            final online = docs.where((doc) {
+                              final data = doc.data() as Map<String, dynamic>?;
+                              return data?['isOnline'] == true;
+                            }).length;
                             if (total == 0) return Center(child: Text('Trống', style: TextStyle(fontSize: 10, color: Theme.of(context).textTheme.bodySmall?.color)));
                             return AspectRatio(
                               aspectRatio: 1.0,
