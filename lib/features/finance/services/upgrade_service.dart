@@ -6,14 +6,20 @@ import '../../logs/models/audit_log_model.dart';
 class UpgradeService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  Stream<List<UpgradeRequestModel>> getPendingRequests() {
+  Stream<List<UpgradeRequestModel>> getAllRequests() {
     return _db
         .collection('upgrade_requests')
-        .where('status', isEqualTo: 'pending')
         .snapshots()
         .map((snapshot) {
-          final requests = snapshot.docs
+          var requests = snapshot.docs
               .map((doc) => UpgradeRequestModel.fromFirestore(doc))
+              .where((req) {
+                if (req.status == 'expired') return false;
+                if (req.status == 'pending' && DateTime.now().difference(req.createdAt).inMinutes > 10) {
+                  return false;
+                }
+                return true;
+              })
               .toList();
           requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return requests;
@@ -40,7 +46,6 @@ class UpgradeService {
     int maxAi = 3;
     if (request.requestedTier == 'EXPERT') maxAi = 15;
     if (request.requestedTier == 'PRO') maxAi = 40;
-    if (request.requestedTier == 'ENTERPRISE') maxAi = 999;
     
     final subscriptionRef = _db
         .collection('users')

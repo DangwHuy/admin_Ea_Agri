@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/common/custom_admin_table.dart';
 import '../../../core/widgets/common/custom_admin_toolbar.dart';
@@ -19,11 +20,32 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
   final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  Timer? _timer;
+  late Stream<List<UpgradeRequestModel>> _requestsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestsStream = _upgradeService.getAllRequests();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   void dispose() {
+    _timer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  String _getRemainingTimeText(DateTime createdAt) {
+    final elapsed = DateTime.now().difference(createdAt).inSeconds;
+    final remaining = 600 - elapsed;
+    if (remaining <= 0) return 'Hết hạn';
+    final m = remaining ~/ 60;
+    final s = remaining % 60;
+    return 'Hết hạn sau: ${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -45,7 +67,7 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Yêu cầu nâng cấp hội viên',
+                      'Lịch sử nâng cấp hội viên',
                       style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: onSurface,
@@ -53,7 +75,7 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Duyệt hoặc từ chối các yêu cầu nâng cấp gói chuyên gia/pro từ người dùng.',
+                      'Theo dõi lịch sử giao dịch nâng cấp tự động và xử lý thủ công (nếu cần).',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(context).textTheme.bodySmall?.color,
                           ),
@@ -73,7 +95,7 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
                 children: [
                   const Expanded(
                     child: Text(
-                      'Danh sách yêu cầu đang chờ xử lý',
+                      'Danh sách toàn bộ giao dịch',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -113,7 +135,7 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
             // Table
             Expanded(
               child: StreamBuilder<List<UpgradeRequestModel>>(
-                stream: _upgradeService.getPendingRequests(),
+                stream: _requestsStream,
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(child: Text('Lỗi: ${snapshot.error}'));
@@ -137,7 +159,7 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
 
                   return CustomAdminTable(
                     flex: const [3, 2, 2, 2, 2, 3],
-                    labels: const ['Người dùng', 'Gói yêu cầu', 'Mã chuyển khoản', 'Số tiền', 'Ngày yêu cầu', 'Thao tác'],
+                    labels: const ['Người dùng', 'Gói yêu cầu', 'Mã chuyển khoản', 'Số tiền', 'Ngày yêu cầu', 'Trạng thái / Thao tác'],
                     itemCount: requests.length,
                     rowBuilder: (context, index) {
                       final req = requests[index];
@@ -184,24 +206,46 @@ class _MembershipUpgradeScreenState extends State<MembershipUpgradeScreen> {
                         // Date
                         Text(DateFormat('dd/MM/yyyy HH:mm').format(req.createdAt)),
                         // Actions
-                        Row(
-                          children: [
-                            ElevatedButton(
-                              onPressed: () => _handleApprove(req),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                              ),
-                              child: const Text('Duyệt'),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: () => _handleReject(req),
-                              style: TextButton.styleFrom(foregroundColor: Colors.red),
-                              child: const Text('Từ chối'),
-                            ),
-                          ],
-                        ),
+                        // Actions
+                        req.status == 'pending'
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Row(
+                                    children: [
+                                      ElevatedButton(
+                                        onPressed: () => _handleApprove(req),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: const Text('Duyệt'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      TextButton(
+                                        onPressed: () => _handleReject(req),
+                                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                        child: const Text('Từ chối'),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _getRemainingTimeText(req.createdAt),
+                                    style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              )
+                            : req.status == 'approved'
+                                ? CustomAdminBadge(
+                                    text: 'Đã thanh toán',
+                                    color: Colors.green,
+                                  )
+                                : CustomAdminBadge(
+                                    text: 'Đã từ chối',
+                                    color: Colors.red,
+                                  ),
                       ];
                     },
                   );
