@@ -98,6 +98,9 @@ class _DiseaseManagerScreenState extends State<DiseaseManagerScreen> {
     final tagsController = TextEditingController(
       text: (data['tags'] as List? ?? []).join(', '),
     );
+    final cropsController = TextEditingController(
+      text: (data['crops'] as List? ?? []).join(', '),
+    );
 
     String selectedType = data['type'] ?? 'Nấm';
     if (!_types.contains(selectedType) && selectedType != 'Tất cả') {
@@ -322,6 +325,13 @@ class _DiseaseManagerScreenState extends State<DiseaseManagerScreen> {
                           'Tags từ khóa (cách bởi dấu phẩy)',
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: cropsController,
+                        decoration: glassInputDecoration(
+                          'Loại cây ảnh hưởng (cách bởi dấu phẩy)',
+                        ),
+                      ),
                       const SizedBox(height: 32),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
@@ -380,6 +390,9 @@ class _DiseaseManagerScreenState extends State<DiseaseManagerScreen> {
                                         ),
                                         'tags': _stringToList(
                                           tagsController.text,
+                                        ),
+                                        'crops': _stringToList(
+                                          cropsController.text,
                                         ),
                                         'imageUrl': finalImageUrl,
                                         'updatedAt':
@@ -1441,9 +1454,10 @@ class _DiseaseManagerScreenState extends State<DiseaseManagerScreen> {
                             (paginatedDocs.length * 90) +
                             100, // Dynamic height based on items
                         child: CustomAdminTable(
-                          flex: const [4, 2, 2, 2, 1],
+                          flex: const [3, 2, 2, 2, 2, 1],
                           labels: const [
                             "SÂU BỆNH",
+                            "LOẠI CÂY",
                             "PHÂN LOẠI",
                             "MỨC ĐỘ",
                             "TRẠNG THÁI",
@@ -1554,10 +1568,35 @@ class _DiseaseManagerScreenState extends State<DiseaseManagerScreen> {
                                                 fontWeight: FontWeight.w600,
                                               ),
                                         ),
+                                        if (data['submitter_uid'] != null) ...[
+                                          const SizedBox(height: 4),
+                                          SelectableText(
+                                            "Gửi bởi: ${data['submitter_auth_name'] ?? data['submitter_name'] ?? 'Ẩn danh'} (UID: ${data['submitter_uid']})",
+                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                              color: Colors.redAccent,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
                                 ],
+                              ),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  (data['crops'] as List? ?? []).join(', ').isEmpty 
+                                      ? 'Nhiều loại' 
+                                      : (data['crops'] as List? ?? []).join(', '),
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                               Align(
                                 alignment: Alignment.centerLeft,
