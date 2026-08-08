@@ -310,22 +310,40 @@ class _SidebarTile extends StatefulWidget {
 class _SidebarTileState extends State<_SidebarTile> {
   bool _hovered = false;
 
-  Widget _buildBadge(bool isExpanded) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
+  Widget _buildBadge(bool isExpanded, String route) {
+    Stream<QuerySnapshot> stream;
+    bool Function(Map<String, dynamic>?) filter;
+
+    if (route == '/finance/upgrades') {
+      stream = FirebaseFirestore.instance
           .collection('upgrade_requests')
           .where('status', isEqualTo: 'pending')
-          .snapshots(),
+          .snapshots();
+      filter = (data) {
+        if (data == null) return false;
+        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+        if (createdAt == null) return false;
+        return DateTime.now().difference(createdAt).inMinutes <= 10;
+      };
+    } else if (route == '/community-posts') {
+      stream = FirebaseFirestore.instance
+          .collection('posts')
+          .where('status', isEqualTo: 'pending')
+          .snapshots();
+      filter = (data) => true;
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: stream,
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
         }
         final validDocs = snapshot.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>?;
-          if (data == null) return false;
-          final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-          if (createdAt == null) return false;
-          return DateTime.now().difference(createdAt).inMinutes <= 10;
+          return filter(data);
         }).toList();
         final count = validDocs.length;
         if (count == 0) {
@@ -436,12 +454,12 @@ class _SidebarTileState extends State<_SidebarTile> {
                         ),
                       ),
                     ),
-                  if (widget.isExpanded && widget.item.route == '/finance/upgrades')
-                    _buildBadge(true),
+                  if (widget.isExpanded)
+                    _buildBadge(true, widget.item.route),
                 ],
               ),
-              if (!widget.isExpanded && widget.item.route == '/finance/upgrades')
-                _buildBadge(false),
+              if (!widget.isExpanded)
+                _buildBadge(false, widget.item.route),
             ],
           ),
         ),

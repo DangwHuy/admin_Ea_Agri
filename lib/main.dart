@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // Import dotenv
 import 'package:go_router/go_router.dart';
+import 'package:flutter_web_plugins/url_strategy.dart'; // Import url_strategy
 import 'firebase_options.dart';
 import 'core/router/app_router.dart';
 import 'core/providers/menu_provider.dart';
@@ -19,6 +20,7 @@ import 'l10n/app_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy(); // Loại bỏ dấu # khỏi URL web
 
   await initializeDateFormatting('vi_VN', null);
   

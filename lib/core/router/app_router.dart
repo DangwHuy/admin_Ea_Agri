@@ -7,6 +7,7 @@ import '../../features/user_management/screens/user_list_screen.dart';
 import '../../features/content_management/screens/disease_manager_screen.dart';
 import '../../features/content_management/screens/banner_manager_screen.dart';
 import '../../features/content_management/screens/community_posts_screen.dart';
+import '../../features/traceability/screens/trace_screen.dart'; // Import TraceScreen
 
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
@@ -37,7 +38,7 @@ class AppRouter {
       redirect: (context, state) {
         final bool isLoggedIn = FirebaseAuth.instance.currentUser != null;
         final bool isGoingToLogin = state.matchedLocation == '/login';
-        final bool isPublicRoute = state.matchedLocation.startsWith('/info');
+        final bool isPublicRoute = state.matchedLocation.startsWith('/info') || state.matchedLocation.startsWith('/trace');
 
         if (!isLoggedIn && !isGoingToLogin && !isPublicRoute) return '/login';
         if (isLoggedIn && isGoingToLogin) return '/dashboard';
@@ -122,6 +123,13 @@ Chúng tôi luôn sẵn sàng lắng nghe ý kiến đóng góp của bạn đ�
                 break;
             }
             return InfoScreen(title: title, content: content);
+          },
+        ),
+        GoRoute(
+          path: '/trace',
+          builder: (context, state) {
+            final id = state.uri.queryParameters['id'] ?? '';
+            return TraceScreen(harvestId: id);
           },
         ),
         // SỬ DỤNG SHELL_ROUTE CHO CÁC TRANG QUẢN TRỊ
