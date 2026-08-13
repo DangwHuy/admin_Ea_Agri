@@ -14,6 +14,7 @@ class TraceScreen extends StatefulWidget {
 class _TraceScreenState extends State<TraceScreen> {
   bool _isLoading = true;
   String _error = '';
+  bool _isDiaryExpanded = false;
   
   Map<String, dynamic>? _harvestData;
   Map<String, dynamic>? _treeData;
@@ -66,6 +67,8 @@ class _TraceScreenState extends State<TraceScreen> {
       'activities': 'hoạt động',
       'unknown': 'Không rõ',
       'unnamed_farm': 'Vườn Không Tên',
+      'view_more': 'Xem thêm',
+      'show_less': 'Thu gọn',
     },
     'en': {
       'title': 'Traceability',
@@ -102,6 +105,8 @@ class _TraceScreenState extends State<TraceScreen> {
       'activities': 'activities',
       'unknown': 'Unknown',
       'unnamed_farm': 'Unnamed Farm',
+      'view_more': 'View more',
+      'show_less': 'Show less',
     },
     'zh': {
       'title': '产品追溯',
@@ -138,6 +143,8 @@ class _TraceScreenState extends State<TraceScreen> {
       'activities': '项活动',
       'unknown': '未知',
       'unnamed_farm': '未命名农场',
+      'view_more': '查看更多',
+      'show_less': '收起',
     }
   };
 
@@ -175,14 +182,64 @@ class _TraceScreenState extends State<TraceScreen> {
           _farmData = farmDoc.data();
           
           if (_farmData != null && _farmData!['ownerId'] != null) {
-             final diaryQuery = await db.collection('users')
-                 .doc(_farmData!['ownerId'])
-                 .collection('farms')
-                 .doc(_harvestData!['farmId'])
-                 .collection('diary')
-                 .orderBy('date', descending: true)
-                 .get();
-             _diaryEntries = diaryQuery.docs.map((doc) => doc.data()).toList();
+            // 1. Fetch previous harvest date for this tree
+            DateTime? previousHarvestDate;
+            final harvestDate = (_harvestData!['harvestDate'] as Timestamp?)?.toDate();
+            
+            if (harvestDate != null && _harvestData!['treeId'] != null) {
+              final treeHarvestsQuery = await db.collection('harvests')
+                  .where('treeId', isEqualTo: _harvestData!['treeId'])
+                  .get();
+              var treeHarvests = treeHarvestsQuery.docs.map((d) => d.data()).toList();
+              
+              // Sort descending by date
+              treeHarvests.sort((a, b) {
+                final dateA = (a['harvestDate'] as Timestamp?)?.toDate() ?? DateTime.now();
+                final dateB = (b['harvestDate'] as Timestamp?)?.toDate() ?? DateTime.now();
+                return dateB.compareTo(dateA);
+              });
+              
+              for (var h in treeHarvests) {
+                final hDate = (h['harvestDate'] as Timestamp?)?.toDate();
+                if (hDate != null && hDate.isBefore(harvestDate)) {
+                  previousHarvestDate = hDate;
+                  break;
+                }
+              }
+            }
+
+            // 2. Fetch diary entries for this farm
+            final diaryQuery = await db.collection('farm_diary')
+                .doc(_farmData!['ownerId'])
+                .collection('entries')
+                .where('traceabilityFarmId', isEqualTo: _harvestData!['farmId'])
+                .get();
+                
+            var list = diaryQuery.docs.map((doc) => doc.data()).toList();
+            
+            // 3. Filter by date in memory
+            list = list.where((entry) {
+              final date = (entry['date'] as Timestamp?)?.toDate();
+              if (date == null) return false;
+              
+              bool isValid = true;
+              if (previousHarvestDate != null && date.isBefore(previousHarvestDate)) {
+                isValid = false;
+              }
+              if (harvestDate != null && date.isAfter(harvestDate)) {
+                isValid = false;
+              }
+              return isValid;
+            }).toList();
+            
+            // 4. Sort descending
+            list.sort((a, b) {
+              final dateA = (a['date'] as Timestamp?)?.toDate() ?? DateTime.now();
+              final dateB = (b['date'] as Timestamp?)?.toDate() ?? DateTime.now();
+              return dateB.compareTo(dateA);
+            });
+            
+            _diaryEntries = list;
           }
         }
       }
@@ -232,38 +289,40 @@ class _TraceScreenState extends State<TraceScreen> {
 
     return Scaffold(
       backgroundColor: _bgColor,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Container(
-            color: _bgColor,
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                _buildAppBar(),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildHeroCard(),
-                        const SizedBox(height: 16),
-                        _buildQuickStats(),
-                        const SizedBox(height: 24),
-                        _buildBatchInfo(),
-                        const SizedBox(height: 24),
-                        _buildFarmOrigin(),
-                        const SizedBox(height: 24),
-                        _buildProductJourney(),
-                        const SizedBox(height: 32),
-                        _buildTrustFooter(),
-                        const SizedBox(height: 40),
-                      ],
+      body: SelectionArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Container(
+              color: _bgColor,
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  _buildAppBar(),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildHeroCard(),
+                          const SizedBox(height: 16),
+                          _buildQuickStats(),
+                          const SizedBox(height: 24),
+                          _buildBatchInfo(),
+                          const SizedBox(height: 24),
+                          _buildFarmOrigin(),
+                          const SizedBox(height: 24),
+                          _buildProductJourney(),
+                          const SizedBox(height: 32),
+                          _buildTrustFooter(),
+                          const SizedBox(height: 40),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -285,7 +344,10 @@ class _TraceScreenState extends State<TraceScreen> {
       ),
       actions: [
         PopupMenuButton<String>(
-          icon: const Icon(Icons.language, color: Colors.white),
+          icon: Text(
+            _currentLang == 'vi' ? '🇻🇳' : (_currentLang == 'en' ? '🇬🇧' : '🇨🇳'),
+            style: const TextStyle(fontSize: 24),
+          ),
           onSelected: (String lang) {
             setState(() {
               _currentLang = lang;
@@ -689,7 +751,9 @@ class _TraceScreenState extends State<TraceScreen> {
   }
 
   Widget _buildMiniDiary() {
-    final latestEntry = _diaryEntries.first;
+    final displayCount = _isDiaryExpanded ? _diaryEntries.length : (_diaryEntries.length > 3 ? 3 : _diaryEntries.length);
+    final displayedEntries = _diaryEntries.take(displayCount).toList();
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -700,20 +764,66 @@ class _TraceScreenState extends State<TraceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.history, size: 14, color: _primaryGreen),
-              const SizedBox(width: 6),
-              Text('${t('latest')}${_formatDate(latestEntry['date'], includeTime: false)}', style: TextStyle(fontSize: 12, color: _primaryGreen, fontWeight: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${latestEntry['category'] ?? ''} - ${latestEntry['note'] ?? ''}',
-            style: TextStyle(fontSize: 13, color: _textColor, height: 1.4),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          ...displayedEntries.map((entry) {
+            final isFirst = entry == displayedEntries.first;
+            return Padding(
+              padding: EdgeInsets.only(bottom: entry == displayedEntries.last ? 0 : 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.history, size: 14, color: isFirst ? _primaryGreen : _subTextColor),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${isFirst ? t('latest') : ''}${_formatDate(entry['date'], includeTime: false)}', 
+                        style: TextStyle(
+                          fontSize: 12, 
+                          color: isFirst ? _primaryGreen : _subTextColor, 
+                          fontWeight: isFirst ? FontWeight.w700 : FontWeight.w500
+                        )
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${entry['category'] ?? ''} - ${entry['note'] ?? ''}',
+                    style: TextStyle(fontSize: 13, color: _textColor, height: 1.4),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          if (_diaryEntries.length > 3) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _isDiaryExpanded = !_isDiaryExpanded;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _isDiaryExpanded ? t('show_less') : '${t('view_more')} (${_diaryEntries.length - 3})',
+                      style: TextStyle(color: _primaryGreen, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      _isDiaryExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      color: _primaryGreen,
+                      size: 18,
+                    )
+                  ],
+                ),
+              ),
+            )
+          ]
         ],
       ),
     );
